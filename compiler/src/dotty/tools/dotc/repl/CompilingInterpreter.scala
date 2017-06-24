@@ -213,10 +213,11 @@ class CompilingInterpreter(
       case Some(tree :: rest) =>
         if (tree.isTerm && !tree.isInstanceOf[Assign]) {
           // reparse literal to be assignment
+          println("\nDEBUG: no-assign assign")
           interpretInner(parse(s"val $newVarName = ${tree.show}").map(trees => trees ::: rest))
         }
         else {
-          val req = new Request(tree.show, newLineName)
+          val req = new Request(Some(List(tree)), newLineName)
           if (!req.compile())
             Interpreter.Error // an error happened during compilation, e.g. a type error
           else {
@@ -242,6 +243,14 @@ class CompilingInterpreter(
     // parse
     previousOutput.clear()
     val parsedLine = parse(line)
+    parsedLine match {
+      case Some(trees) =>
+        println(s"\nparsed line: $trees")
+        trees.foreach{tree =>
+          println(s"\nparsed line tree($tree): ${tree.show}")
+        }
+    }
+
     interpretInner(parsedLine)
   }
 
@@ -326,9 +335,12 @@ class CompilingInterpreter(
   }
 
   /** One line of code submitted by the user for interpretation */
-  private class Request(val line: String, val lineName: String)(implicit ctx: Context) {
+  private class Request(val parsed: Option[List[Tree]], val lineName: String)
+  (implicit ctx: Context) {
+    def this(line: String, lineName: String)(implicit ctx: Context) =
+      this(parse(line), lineName)(ctx)
+
     private val trees = {
-      val parsed = parse(line)
       parsed match {
         case Some(ts) => ts
         case None => Nil
@@ -371,9 +383,6 @@ class CompilingInterpreter(
     /** Code to access a variable with the specified name */
     private def fullPath(vname: Name): String = fullPath(vname.toString)
 
-    /** the line of code to compute */
-    private def toCompute = line
-
     /** generate the source code for the object that computes this request
      *  TODO Reformulate in a functional way
      */
@@ -382,7 +391,8 @@ class CompilingInterpreter(
         // header for the wrapper object
         code.println(s"object $objectName{")
         code.print(importsPreamble)
-        code.println(toCompute)
+        //FIXME: this is likely the culprit of failure on: def id(x: 4): 4 = x
+        code.println(parsed.getOrElse(Nil).head.show)
         handlers.foreach(_.extraCodeToEvaluate(this,code))
         code.println(importsTrailer)
         //end the wrapper object
