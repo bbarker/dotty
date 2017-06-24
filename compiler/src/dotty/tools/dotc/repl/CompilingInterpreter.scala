@@ -9,6 +9,7 @@ import java.io.{
 import java.lang.{Class, ClassLoader, Thread, System, StringBuffer}
 import java.net.{URL, URLClassLoader}
 
+import scala.annotation.tailrec
 import scala.collection.immutable.ListSet
 import scala.collection.mutable
 import scala.collection.mutable.{ListBuffer, HashSet, ArrayBuffer}
@@ -204,34 +205,44 @@ class CompilingInterpreter(
     !runCtx.reporter.hasErrors
   }
 
+  @tailrec
+  private final def interpretInner(treesMaybe: Option[List[Tree]])(implicit ctx: Context): Interpreter.Result = {
+    treesMaybe match {
+      case None => Interpreter.Incomplete
+      case Some(Nil) => Interpreter.Error // parse error or empty input
+      case Some(tree :: rest) =>
+        if (tree.isTerm && !tree.isInstanceOf[Assign]) {
+          // reparse literal to be assignment
+          interpretInner(parse(s"val $newVarName = ${tree.show}").map(trees => trees ::: rest))
+        }
+        else {
+          val req = new Request(tree.show, newLineName)
+          if (!req.compile())
+            Interpreter.Error // an error happened during compilation, e.g. a type error
+          else {
+            val (resultStrings, succeeded) = req.loadAndRun()
+            if (delayOutput)
+              previousOutput ++= resultStrings.map(clean)
+            else if (printResults || !succeeded)
+              resultStrings.foreach(x => out.print(clean(x)))
+            if (succeeded) {
+              prevRequests += req
+              Interpreter.Success
+            }
+            else Interpreter.Error
+          }
+          interpretInner(Some(rest))
+        }
+    }
+  }
+
   override def interpret(line: String)(implicit ctx: Context): Interpreter.Result = {
     // if (prevRequests.isEmpty)
     //  new Run(this) // initialize the compiler // (not sure this is needed)
     // parse
-    parse(line) match {
-      case None => Interpreter.Incomplete
-      case Some(Nil) => Interpreter.Error // parse error or empty input
-      case Some(tree :: Nil) if tree.isTerm && !tree.isInstanceOf[Assign] =>
-        previousOutput.clear() // clear previous error reporting
-        interpret(s"val $newVarName =\n$line")
-      case Some(trees) =>
-        previousOutput.clear() // clear previous error reporting
-        val req = new Request(line, newLineName)
-        if (!req.compile())
-          Interpreter.Error // an error happened during compilation, e.g. a type error
-        else {
-          val (resultStrings, succeeded) = req.loadAndRun()
-          if (delayOutput)
-            previousOutput ++= resultStrings.map(clean)
-          else if (printResults || !succeeded)
-            resultStrings.foreach(x => out.print(clean(x)))
-          if (succeeded) {
-            prevRequests += req
-            Interpreter.Success
-          }
-          else Interpreter.Error
-        }
-    }
+    previousOutput.clear()
+    val parsedLine = parse(line)
+    interpretInner(parsedLine)
   }
 
   private def loadAndSetValue(objectName: String, value: AnyRef) = {
@@ -318,7 +329,6 @@ class CompilingInterpreter(
   private class Request(val line: String, val lineName: String)(implicit ctx: Context) {
     private val trees = {
       val parsed = parse(line)
-      previousOutput.clear() // clear previous error reporting
       parsed match {
         case Some(ts) => ts
         case None => Nil
