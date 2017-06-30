@@ -1223,6 +1223,20 @@ object messages {
           |""".stripMargin
   }
 
+  case class OverloadedOrRecursiveMethodNeedsResultTypeSimple(name: String)(implicit ctx: Context)
+    extends Message(OverloadedOrRecursiveMethodNeedsResultTypeID) {
+    val kind = "Syntax"
+    val msg = hl"""overloaded or recursive method ${name} needs return type"""
+    val explanation =
+      hl"""Case 1: ${name} is overloaded
+          |If there are multiple methods named `${name}` and at least one definition of
+          |it calls another, you need to specify the calling method's return type.
+          |
+          |Case 2: ${name} is recursive
+          |If `${name}` calls itself on any path, you need to specify its return type.
+          |""".stripMargin
+  }
+
   case class RecursiveValueNeedsResultType(tree: Names.TermName)(implicit ctx: Context)
   extends Message(RecursiveValueNeedsResultTypeID) {
     val kind = "Syntax"

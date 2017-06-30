@@ -1872,8 +1872,6 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
    */
   def adaptInterpolated(tree: Tree, pt: Type, original: untpd.Tree)(implicit ctx: Context): Tree = {
 
-    assert(pt.exists)
-
     def methodStr = err.refStr(methPart(tree).tpe)
 
     def missingArgs(mt: MethodType) = {
@@ -1929,7 +1927,14 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
         else
           tree
       case _ => tryInsertApplyOrImplicit(tree, pt) {
-        errorTree(tree, MethodDoesNotTakeParameters(tree, methPart(tree).tpe)(err))
+        println(s"Type: ${wtp}\nresType: ${pt.resType}")
+        pt.resType match {
+          case IgnoredProto(WildcardType(optBounds)) if optBounds == NoType =>
+              errorTree(tree, OverloadedOrRecursiveMethodNeedsResultTypeSimple(tree.symbol.toString))
+          case resType =>
+            errorTree(tree, MethodDoesNotTakeParameters(tree, methPart(tree).tpe)(err))
+
+        }
       }
     }
 
