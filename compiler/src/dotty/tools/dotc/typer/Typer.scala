@@ -1927,13 +1927,12 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
         else
           tree
       case _ => tryInsertApplyOrImplicit(tree, pt) {
-        println(s"Type: ${wtp}\nresType: ${pt.resType}")
         pt.resType match {
-          case IgnoredProto(WildcardType(optBounds)) if optBounds == NoType =>
-              errorTree(tree, OverloadedOrRecursiveMethodNeedsResultTypeSimple(tree.symbol.toString))
+          case IgnoredProto(WildcardType(optBounds))
+            if (optBounds == NoType) && (pt.args.size == tree.productArity) =>
+              errorTree(tree, OverloadedOrRecursiveMethodNeedsResultType(tree.symbol))
           case resType =>
             errorTree(tree, MethodDoesNotTakeParameters(tree, methPart(tree).tpe)(err))
-
         }
       }
     }
